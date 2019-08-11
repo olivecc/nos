@@ -667,7 +667,7 @@ class PPU
                     }
                 }
             }
-            else if(dot() <= (scanln_width - 4))
+            else if(dot() < (scanln_width - 4))
             {
                 if(is_rendering_enabled())
                 {
