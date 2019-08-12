@@ -1,19 +1,22 @@
 #ifndef  PULSE_H_NOS
 #define  PULSE_H_NOS
 
+#include <cstdint>
+
 #include "lectr.h"
 #include "envel.h"
-#include "timer.h"
+#include "pt_timer.h"
 #include "sweep.h"
 
 namespace NES
 {
 
+
 struct Pulse
 {
     Length_Counter lectr;
     Envelope envel;
-    Timer timer;
+    PT_Timer timer;
     Sweep sweep;
         
     static constexpr uint8_t duty_table[4] = 

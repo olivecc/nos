@@ -1,6 +1,10 @@
 #ifndef  LECTR_H_NOS
 #define  LECTR_H_NOS
 
+#include <cstdint>
+
+#include <cstdint>
+
 namespace NES
 {
 

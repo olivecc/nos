@@ -190,10 +190,8 @@ class CPU
             case(0): apu->write_reg_pulse   (sub_addr, data, false);    break;
             case(1): apu->write_reg_pulse   (sub_addr, data, true);     break;
             case(2): apu->write_reg_triangle(sub_addr, data);           break;
-            /*
             case(3): apu->write_reg_noise   (sub_addr, data);           break;
-            case(4): apu->write_reg_dmc     (sub_addr, data);           break;
-            */
+            //case(4): apu->write_reg_dmc     (sub_addr, data);           break;
             case(5):
             {
                 switch(addr % 4)

@@ -1,7 +1,7 @@
 #ifndef SWEEP_H_NOS
 #define SWEEP_H_NOS
 
-#include "timer.h"
+#include <cstdint>
 
 namespace NES
 {

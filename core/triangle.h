@@ -1,7 +1,9 @@
 #ifndef  TRIANGLE_H_NOS
 #define  TRIANGLE_H_NOS
 
-#include "timer.h"
+#include <cstdint>
+
+#include "pt_timer.h"
 #include "lectr.h"
 #include "lictr.h"
 
@@ -12,7 +14,7 @@ namespace NES
 class Triangle
 {
   private:
-    Timer timer;
+    PT_Timer timer;
     Length_Counter lectr;
     Linear_Counter lictr;
 

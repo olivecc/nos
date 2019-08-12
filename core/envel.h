@@ -1,6 +1,8 @@
 #ifndef  ENVEL_H_NOS
 #define  ENVEL_H_NOS
 
+#include <cstdint>
+
 namespace NES
 {
 

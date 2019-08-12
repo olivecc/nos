@@ -1,6 +1,8 @@
 #ifndef  LICTR_H_NOS
 #define  LICTR_H_NOS
 
+#include <cstdint>
+
 namespace NES
 {
 
@@ -33,8 +35,6 @@ class Linear_Counter
     {
         lectr_halt = data & (1U << 7);
         clock_reload = data & (0xFFU >> 1);
-        
-        should_reload = true;
     }
 
     void write_d(uint8_t data)

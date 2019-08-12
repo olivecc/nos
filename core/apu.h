@@ -1,8 +1,11 @@
 #ifndef  APU_H_NOS
 #define  APU_H_NOS
 
+#include <cstdint>
+
 #include "pulse.h"
 #include "triangle.h"
+#include "noise.h"
 
 namespace NES
 {
@@ -15,6 +18,7 @@ class APU
     Pulse pulse_fst;
     Pulse pulse_snd;
     Triangle triangle;
+    Noise noise;
 
     bool frame_surpress_irq;
     bool frame_seq_alt_mode;
@@ -28,6 +32,7 @@ class APU
         pulse_fst.tick_frame_quarter();
         pulse_snd.tick_frame_quarter();
          triangle.tick_frame_quarter();
+            noise.tick_frame_quarter();
     }
 
     void tick_frame_half()
@@ -35,6 +40,7 @@ class APU
         pulse_fst.tick_frame_half();
         pulse_snd.tick_frame_half();
          triangle.tick_frame_half();
+            noise.tick_frame_half();
     }
 
   public:
@@ -101,13 +107,15 @@ class APU
         {
             pulse_fst.tick();
             pulse_snd.tick();
+                noise.tick();
         }
 
         triangle.tick();
 
         uint8_t pulse_vol = pulse_fst.vol() + pulse_snd.vol();
         float pulse_out = lookup_pulse_out[pulse_vol];
-        float tnd_out   = lookup_tnd_out[triangle.vol()][0][0]; //TODO noise/dmc
+        // TODO dmc
+        float tnd_out   = lookup_tnd_out[triangle.vol()][noise.vol()][0]; 
         float output = pulse_out + tnd_out;
         shared_bus->audiobuf.push(output);
     }
@@ -139,6 +147,18 @@ class APU
         }
     }
 
+    void write_reg_noise(uint8_t sub_addr, uint8_t data)
+    {
+        switch(sub_addr)
+        {
+            case(0): noise.write_a(data); break;
+            case(1): noise.write_b(data); break;
+            case(2): noise.write_c(data); break;
+            case(3): noise.write_d(data); break;
+            default: break;
+        }
+    }
+
     uint8_t read_reg_status()
     {
         const bool irq_frame = shared_bus->line_irq_low & IRQ_Src::APU_FRAME;
@@ -147,6 +167,7 @@ class APU
         uint8_t value = (((pulse_fst.is_active()  ? 1U : 0U) << 0) |
                          ((pulse_snd.is_active()  ? 1U : 0U) << 1) |
                          (( triangle.is_active()  ? 1U : 0U) << 2) |
+                         ((    noise.is_active()  ? 1U : 0U) << 3) |
                          ((irq_frame              ? 1U : 0U) << 6) |
                          ((irq_dmc                ? 1U : 0U) << 7));
 
@@ -160,6 +181,7 @@ class APU
         pulse_fst.set_enabled(data & (1U << 0));
         pulse_snd.set_enabled(data & (1U << 1));
          triangle.set_enabled(data & (1U << 2));
+            noise.set_enabled(data & (1U << 3));
 
         shared_bus->line_irq_low &= ~(IRQ_Src::APU_DMC);
     }

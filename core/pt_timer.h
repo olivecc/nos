@@ -1,11 +1,14 @@
-#ifndef  TIMER_H_NOS
-#define  TIMER_H_NOS
+#ifndef  PT_TIMER_H_NOS
+#define  PT_TIMER_H_NOS
+
+#include <cstdint>
 
 namespace NES
 {
 
 
-struct Timer
+// For use with Pulse and Triangle channels
+struct PT_Timer
 {
     uint16_t clock_reload;
     uint16_t clock : 11;
@@ -44,4 +47,4 @@ struct Timer
 
 }
 
-#endif //TIMER_H_NOS
+#endif //PT_TIMER_H_NOS
