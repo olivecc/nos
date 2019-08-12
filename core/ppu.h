@@ -523,14 +523,12 @@ class PPU
         bool bg_masked = (!mask_show_bg_left && (dot() <= 8));
         bool sp_masked = (!mask_show_sp_left && (dot() <= 8));
 
-        unsigned int shamt = scroll_x_fine;
-
-        auto lshift = [shamt](uint16_t lo, uint16_t hi) -> uint8_t
+        auto lshift = [](uint16_t lo, uint16_t hi, uint8_t shamt) -> uint8_t
         {
             return (((((lo << shamt) >> 7) & 1U) << 0) |
                     ((((hi << shamt) >> 7) & 1U) << 1));
         };
-        auto rshift = [shamt](uint16_t lo, uint16_t hi) -> uint8_t
+        auto rshift = [](uint16_t lo, uint16_t hi, uint8_t shamt) -> uint8_t
         {
             return ((((lo >> shamt) & 1U) << 0) |
                     (((hi >> shamt) & 1U) << 1));
@@ -538,7 +536,8 @@ class PPU
 
         uint8_t bg_color = ((mask_show_bg && !bg_masked)
             ? lshift(bg_tile_shift_lo >> 8, 
-                     bg_tile_shift_hi >> 8)
+                     bg_tile_shift_hi >> 8,
+                     scroll_x_fine)
             : 0);
 
         if(mask_show_sp && !sp_masked)
@@ -551,8 +550,8 @@ class PPU
                     uint8_t sp_lo = sp_tile_shift_lo[i];
                     uint8_t sp_hi = sp_tile_shift_hi[i];
                     uint8_t sp_color = (flip_hori 
-                                        ? rshift(sp_lo, sp_hi)
-                                        : lshift(sp_lo, sp_hi));
+                                        ? rshift(sp_lo, sp_hi, 0)
+                                        : lshift(sp_lo, sp_hi, 0));
                     if(sp_color != 0)
                     {
                         if((i == 0) && (bg_color != 0) &&
@@ -577,7 +576,8 @@ class PPU
         }
         
         uint8_t bg_palette = lshift(palette_shift_lo, 
-                                          palette_shift_hi);
+                                    palette_shift_hi,
+                                    scroll_x_fine);
         return ((bg_palette << 2) | bg_color);
     }
 
