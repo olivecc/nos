@@ -163,30 +163,13 @@ class PPU
 
     uint8_t& cart_access(uint16_t addr)
     {
-        return (((addr & (1U << 13)) == 0)
-            ? pattern_table[addr]
-            : ntram_access(addr));
-    }
-
-    uint8_t& vram_access(uint16_t addr)
-    {
         addr %= 0x4000;
 
         set_vram_addr_bus(addr);
 
-        return ((addr < 0x3F00) 
-            ? cart_access(addr)
-            : pram_access(addr));
-    }
-
-    uint8_t read_vram(uint16_t addr)
-    {
-        return vram_access(addr);
-    }
-
-    void write_vram(uint16_t addr, uint8_t data)
-    {
-        vram_access(addr) = data;
+        return (((addr & (1U << 13)) == 0)
+            ? pattern_table[addr]
+            : ntram_access(addr));
     }
 
     uint16_t nt_addr()
@@ -488,7 +471,7 @@ class PPU
         {
             case(0x0):
             {
-                uint8_t tile_index = read_vram(nt_addr());
+                uint8_t tile_index = cart_access(nt_addr());
                 tile_sliver_addr = (((ctrl_bg_pattern_table ? 1U : 0U) << 12) |
                                     (tile_index << 4) |
                                     (vram_addr >> 12));
@@ -500,19 +483,19 @@ class PPU
                 unsigned int shamt = (((vram_addr >> 6) & 1U) << 1 |
                                       ((vram_addr >> 1) & 1U)) * 2;
                 uint8_t mask = 0xFU >> 2;
-                next_bg_palette = (read_vram(attr_addr()) >> shamt) & mask;
+                next_bg_palette = (cart_access(attr_addr()) >> shamt) & mask;
                 break;
             }
 
             case(0x4):
             {
-                next_bg_tile_lo = read_vram(tile_sliver_addr);
+                next_bg_tile_lo = cart_access(tile_sliver_addr);
                 break;
             }
 
             case(0x6):
             {
-                next_bg_tile_hi = read_vram(tile_sliver_addr + 8);
+                next_bg_tile_hi = cart_access(tile_sliver_addr + 8);
                 break;
             }
         }
@@ -591,7 +574,7 @@ class PPU
   public:
     PPU(Shared_Bus* shared_bus, vector<uint8_t> chr) : shared_bus(shared_bus)
     {
-        memcpy(pattern_table, chr.data(), 0x2000 * sizeof(uint8_t));
+        memcpy(pattern_table, chr.data(), chr.size() * sizeof(uint8_t));
         reset_state(true);
     }
 
@@ -691,7 +674,7 @@ class PPU
                         }
                     }
 
-                    if(dot() % 2) read_vram(nt_addr());
+                    if(dot() % 2) cart_access(nt_addr());
                 }
             }
         }
@@ -853,7 +836,11 @@ class PPU
             case(0x7):
             {
                 // Corrupted write during rendering?
-                write_vram(vram_addr_bus, data);
+                uint16_t addr = vram_addr_bus;
+                uint8_t& dst = ((addr < 0x3F00) 
+                    ? cart_access(addr)
+                    : pram_access(addr));
+                dst = data;
                 increment_vram_addr();
                 break;
             }
