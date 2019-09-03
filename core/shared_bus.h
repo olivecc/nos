@@ -60,6 +60,8 @@ class Shared_Bus
     Double_Buffer<uint8_t, pixel_quantity>      framebuf;
     Double_Buffer<float, max_samples_per_frame> audiobuf;
 
+    uint8_t ciram[0x800] = {0};
+
     uint16_t line_irq_low = 0;
     bool     line_nmi_low = false;
 

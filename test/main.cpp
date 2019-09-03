@@ -1,7 +1,3 @@
-#include "console.h"
-#include "SDL.h"
-#include "sdl_aux.h"
-
 #include <cstdint>      // uint8_t, uint32_t
 #include <vector>
 
@@ -9,6 +5,11 @@
 #include <iterator>
 #include <iostream>
 #include <cstdlib>
+
+#include "console.h"
+#include "SDL.h"
+#include "sdl_aux.h"
+#include "ines.h"
 
 using namespace NES;
 
@@ -81,21 +82,11 @@ vector<uint8_t> load_file(const char* path)
     return vector<uint8_t>(std::istream_iterator<uint8_t>(input), {});
 }
 
-void debug()
-{
-    std::cout << '\n';
-}
-
 void run(const SDL_Aux::State& io, const char* rom_filepath)
 {
     vector<uint8_t> rom = load_file(rom_filepath);
-    auto fst = rom.begin() + 16;
-    auto mid = fst + 0x4000;
-    auto lst = mid + 0x2000;
-    vector<uint8_t> prg_rom(fst, mid);
-    vector<uint8_t> chr_rom(mid, lst);
+    Console console(load_ines(rom));
 
-    Console console(prg_rom, chr_rom);
     uint32_t argb_framebuf[width_px * height_px];
     size_t samples_out_per_frame = sample_rate / frame_rate;
     float audio_out[samples_out_per_frame];
@@ -128,7 +119,6 @@ void run(const SDL_Aux::State& io, const char* rom_filepath)
             console.set_port_one(B::DOWN,   io.kb_state[SDL_SCANCODE_S]);
             console.set_port_one(B::LEFT,   io.kb_state[SDL_SCANCODE_A]);
             console.set_port_one(B::RIGHT,  io.kb_state[SDL_SCANCODE_D]);
-            if(io.kb_state[SDL_SCANCODE_B]) debug();
         }
     } 
     while(!(io.kb_state[SDL_SCANCODE_ESCAPE]));

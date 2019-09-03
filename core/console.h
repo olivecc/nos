@@ -10,12 +10,7 @@
 
 #include <cstdint>      // uint8_t, uint32_t
 #include <memory>       // unique_ptr
-#include <vector>
 #include <cstddef>
-
-using std::unique_ptr;
-using std::vector;
-using std::make_unique;
 
 namespace NES
 {
@@ -28,9 +23,9 @@ class Console
 {
   public:
     Shared_Bus shared_bus;
-    unique_ptr<Controller> port_one;
-    unique_ptr<Controller> port_two;
-    //unique_ptr<Mapper> mapper;
+    std::unique_ptr<Cartridge> cart;
+    std::unique_ptr<Controller> port_one = std::make_unique<Controller>();
+    std::unique_ptr<Controller> port_two = std::make_unique<Controller>();
     PPU ppu;
     APU apu;
     CPU cpu;
@@ -56,13 +51,13 @@ class Console
 
     void exec() { cpu.execute_instruction(); }
 
-    Console(vector<uint8_t> prg, vector<uint8_t> chr) 
-        : shared_bus(), 
-          port_one(make_unique<Controller>()),
-          port_two(make_unique<Controller>()), 
-          ppu(&shared_bus, chr),
-          apu(&shared_bus),
-          cpu(&shared_bus, &ppu, &apu, port_one.get(), port_two.get(), prg) {}
+    Console(std::unique_ptr<Cartridge> inserted_cart) 
+        : shared_bus(),
+          cart(std::move(inserted_cart)),
+          ppu(shared_bus, *(cart.get())),
+          apu(shared_bus),
+          cpu(shared_bus, *(cart.get()), ppu, apu, 
+              *(port_one.get()), *(port_two.get())) {}
 };
 
 

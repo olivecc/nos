@@ -2,7 +2,7 @@
 #define   PPU_H_NOS
 
 #include "shared_bus.h"
-//include mapper
+#include "cart.h"
 
 #include <cstdint>      // uint8_t, uint16_t, uint64_t
 #include <cstring>      // memcpy
@@ -20,15 +20,14 @@ namespace NES
 class PPU
 {
   private:
-    Shared_Bus* shared_bus;
+    Shared_Bus& shared_bus;
+    Cartridge& cart;
 
-    uint8_t ntram[0x800] = {0};
     uint8_t palette_bg[0xC] = {0};
     uint8_t palette_sp[0xC] = {0};
     uint8_t palette_misc[0x4] = {0};
     uint8_t oam[0x100] = {0};
     uint8_t oam_aux[0x20] = {0};
-    uint8_t pattern_table[0x2000] = {0};
 
     uint16_t vram_addr = 0;
     uint16_t vram_addr_tmp = 0;
@@ -135,15 +134,6 @@ class PPU
         return (is_render_scanln() && is_rendering_enabled());
     }
 
-    uint8_t& ntram_access(uint16_t addr)
-    {
-        // The presence/absence of this bit in addr indicates that addr refers
-        // to the nametable starting at address 0x400/0x0 in VRAM, respectively
-        uint16_t nt_mask = 1U << (nt_mirror_vert_hori ? 10 : 11);
-        uint16_t nt_access_addr = (addr & nt_mask) ? 0x400 : 0x0;
-        return ntram[nt_access_addr + (addr % 0x400)];
-    }
-
     // Palette RAM
     uint8_t& pram_access(uint8_t addr)
     {
@@ -161,25 +151,30 @@ class PPU
         }
     }
 
-    uint8_t& cart_access(uint16_t addr)
+    uint8_t cart_read(uint16_t addr)
     {
         addr %= 0x4000;
-
         set_vram_addr_bus(addr);
 
-        return (((addr & (1U << 13)) == 0)
-            ? pattern_table[addr]
-            : ntram_access(addr));
+        return cart.ppu_read(shared_bus, addr);
+    }
+    void cart_write(uint16_t addr, uint8_t data)
+    {
+        addr %= 0x4000;
+        set_vram_addr_bus(addr);
+
+        cart.ppu_write(shared_bus, addr, data);
     }
 
     uint16_t nt_addr()
     {
-        return (0x2000U | (vram_addr % 0x1000));
+        return ((1U << 13) | 
+                (vram_addr & 0x0FFFU));
     }
 
     uint16_t attr_addr()
     {
-        return (0x2000U | 
+        return ((1U << 13) | 
                 ((~(0xFFFFU << 2) << 10) & vram_addr) | 
                 ( ~(0xFFFFU << 4) << 6) |
                 ((~(0xFFFFU << 3) & (vram_addr >> 7)) << 3) |
@@ -462,6 +457,7 @@ class PPU
         }
     }
 
+    //TODO separate (see mmc3/irqspecifics)
     void fetch_bg_tile_data()
     {
         // Strictly, background tile operations should take two cycles each to
@@ -471,7 +467,7 @@ class PPU
         {
             case(0x0):
             {
-                uint8_t tile_index = cart_access(nt_addr());
+                uint8_t tile_index = cart_read(nt_addr());
                 tile_sliver_addr = (((ctrl_bg_pattern_table ? 1U : 0U) << 12) |
                                     (tile_index << 4) |
                                     (vram_addr >> 12));
@@ -483,19 +479,19 @@ class PPU
                 unsigned int shamt = (((vram_addr >> 6) & 1U) << 1 |
                                       ((vram_addr >> 1) & 1U)) * 2;
                 uint8_t mask = 0xFU >> 2;
-                next_bg_palette = (cart_access(attr_addr()) >> shamt) & mask;
+                next_bg_palette = (cart_read(attr_addr()) >> shamt) & mask;
                 break;
             }
 
             case(0x4):
             {
-                next_bg_tile_lo = cart_access(tile_sliver_addr);
+                next_bg_tile_lo = cart_read(tile_sliver_addr);
                 break;
             }
 
             case(0x6):
             {
-                next_bg_tile_hi = cart_access(tile_sliver_addr + 8);
+                next_bg_tile_hi = cart_read(tile_sliver_addr + 8);
                 break;
             }
         }
@@ -567,14 +563,14 @@ class PPU
     bool is_warming_up()
     {
         unsigned int cpu_warmup_cycles = 29658;
-        return ((shared_bus->get_frame_count() == 0) && 
+        return ((shared_bus.get_frame_count() == 0) && 
                 (cycle_count < (cpu_warmup_cycles * 3)));
     }
 
   public:
-    PPU(Shared_Bus* shared_bus, vector<uint8_t> chr) : shared_bus(shared_bus)
+    PPU(Shared_Bus& shared_bus, Cartridge& cart) 
+        : shared_bus(shared_bus), cart(cart)
     {
-        memcpy(pattern_table, chr.data(), chr.size() * sizeof(uint8_t));
         reset_state(true);
     }
 
@@ -627,7 +623,7 @@ class PPU
                         ? get_pixel_color()
                         : vram_addr);
                     uint8_t px_color = pram_access(color_index) & (0xFFU >> 2);
-                    shared_bus->framebuf.push(px_color);
+                    shared_bus.framebuf.push(px_color);
                 }
                     
                 shift_bg_registers();
@@ -674,7 +670,7 @@ class PPU
                         }
                     }
 
-                    if(dot() % 2) cart_access(nt_addr());
+                    if(dot() % 2) cart_read(nt_addr());
                 }
             }
         }
@@ -684,7 +680,7 @@ class PPU
             {
                 set_vram_addr_bus(vram_addr);
                 
-                shared_bus->push_frame();
+                shared_bus.push_frame();
             }
             else { /* Idle */ }
         }
@@ -695,8 +691,8 @@ class PPU
         }
 
         increment_cycle_count();
-        shared_bus->cycle_count += 4;
-        shared_bus->line_nmi_low = (ctrl_nmi_output && stat_nmi_occurred);
+        shared_bus.cycle_count += 4;
+        shared_bus.line_nmi_low = (ctrl_nmi_output && stat_nmi_occurred);
     }
 
     
@@ -732,7 +728,7 @@ class PPU
                     : byte_pair{ pram_access(vram_addr_bus), ~(0xFFU << 6) });
                 value = new_value;
                 mask = new_mask;
-                vram_read_buf = cart_access(vram_addr_bus);
+                vram_read_buf = cart_read(vram_addr_bus);
                 increment_vram_addr();
                 break;
             }
@@ -837,10 +833,12 @@ class PPU
             {
                 // Corrupted write during rendering?
                 uint16_t addr = vram_addr_bus;
-                uint8_t& dst = ((addr < 0x3F00) 
-                    ? cart_access(addr)
-                    : pram_access(addr));
-                dst = data;
+                
+                if(addr < 0x3F00) 
+                    cart_write(addr, data);
+                else
+                    pram_access(addr) = data;    
+                
                 increment_vram_addr();
                 break;
             }

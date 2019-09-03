@@ -13,7 +13,7 @@ namespace NES
 class APU
 {
   private:
-    Shared_Bus* shared_bus;
+    Shared_Bus& shared_bus;
 
     Pulse pulse_fst;
     Pulse pulse_snd;
@@ -44,7 +44,7 @@ class APU
     }
 
   public:
-    APU(Shared_Bus* shared_bus) 
+    APU(Shared_Bus& shared_bus) 
         : shared_bus(shared_bus), pulse_fst(true), pulse_snd(false)
     {
         // Populate mixer lookup tables
@@ -92,7 +92,7 @@ class APU
                     tick_frame_half();
                 
                 if(frame_seq == 3 && !frame_seq_alt_mode && !frame_surpress_irq)
-                    shared_bus->line_irq_low |= IRQ_Src::APU_FRAME;
+                    shared_bus.line_irq_low |= IRQ_Src::APU_FRAME;
             }
 
             unsigned int step_num = (frame_seq_alt_mode ? 5 : 4);
@@ -117,7 +117,7 @@ class APU
         // TODO dmc
         float tnd_out   = lookup_tnd_out[triangle.vol()][noise.vol()][0]; 
         float output = pulse_out + tnd_out;
-        shared_bus->audiobuf.push(output);
+        shared_bus.audiobuf.push(output);
     }
 
     // Precondition: sub_addr < 4
@@ -161,8 +161,8 @@ class APU
 
     uint8_t read_reg_status()
     {
-        const bool irq_frame = shared_bus->line_irq_low & IRQ_Src::APU_FRAME;
-        const bool irq_dmc   = shared_bus->line_irq_low & IRQ_Src::APU_DMC;
+        const bool irq_frame = shared_bus.line_irq_low & IRQ_Src::APU_FRAME;
+        const bool irq_dmc   = shared_bus.line_irq_low & IRQ_Src::APU_DMC;
 
         uint8_t value = (((pulse_fst.is_active()  ? 1U : 0U) << 0) |
                          ((pulse_snd.is_active()  ? 1U : 0U) << 1) |
@@ -171,7 +171,7 @@ class APU
                          ((irq_frame              ? 1U : 0U) << 6) |
                          ((irq_dmc                ? 1U : 0U) << 7));
 
-        shared_bus->line_irq_low &= ~(IRQ_Src::APU_FRAME);
+        shared_bus.line_irq_low &= ~(IRQ_Src::APU_FRAME);
 
         return value;
     }
@@ -183,7 +183,7 @@ class APU
          triangle.set_enabled(data & (1U << 2));
             noise.set_enabled(data & (1U << 3));
 
-        shared_bus->line_irq_low &= ~(IRQ_Src::APU_DMC);
+        shared_bus.line_irq_low &= ~(IRQ_Src::APU_DMC);
     }
 
     void write_reg_frame(uint8_t data)
@@ -191,7 +191,7 @@ class APU
         frame_surpress_irq = (data & (1U << 6));
         frame_seq_alt_mode = (data & (1U << 7));
         if(frame_surpress_irq) 
-            shared_bus->line_irq_low &= ~(IRQ_Src::APU_FRAME);
+            shared_bus.line_irq_low &= ~(IRQ_Src::APU_FRAME);
         // Should really be delayed by (odd/even:3/5) phases
         frame_div_ctr = 0;
         frame_seq = 0;

@@ -2,6 +2,7 @@
 #define CPU_H_NOS
 
 #include "shared_bus.h"
+#include "cart.h"
 #include "ppu.h"
 #include "apu.h"
 
@@ -79,15 +80,14 @@ class CPU
 {
   private:
 
-    Shared_Bus* shared_bus;
-    PPU* ppu;
-    APU* apu;
-    Controller* port_one;
-    Controller* port_two;
+    Shared_Bus& shared_bus;
+    Cartridge& cart;
+    PPU& ppu;
+    APU& apu;
+    Controller& port_one;
+    Controller& port_two;
 
     uint8_t ram[0x800] = { 0 };
-    uint8_t prg_rom[0x8000] = { 0 };
-    uint8_t prg_ram[0x2000] = { 0 };
 
     uint8_t A;              // Accumulator
     uint8_t X, Y;           // Index (general-purpose) registers
@@ -100,8 +100,8 @@ class CPU
 
     bool ignore_irq_change = false;
     bool ignore_nmi_change = false;
-    bool line_irq_low() { return shared_bus->line_irq_low; }
-    bool line_nmi_low() { return shared_bus->line_nmi_low; }
+    bool line_irq_low() { return shared_bus.line_irq_low; }
+    bool line_nmi_low() { return shared_bus.line_nmi_low; }
     bool prev_line_nmi_low = false;
     bool signal_irq = false;
     bool signal_nmi = false;
@@ -116,18 +116,18 @@ class CPU
     {
         ++cycle_count;
 
-        ppu->execute_cycle();
-        ppu->execute_cycle();
+        ppu.execute_cycle();
+        ppu.execute_cycle();
         
-        apu->process_frame_cpu_phase();
+        apu.process_frame_cpu_phase();
     }
 
     void phase_two()
     {
-        ppu->execute_cycle();
+        ppu.execute_cycle();
 
-        apu->process_frame_cpu_phase();
-        apu->tick(cycle_count % 2);
+        apu.process_frame_cpu_phase();
+        apu.tick(cycle_count % 2);
 
         // End-of-instruction poll result (treat every cycle as the last)
         should_interrupt = signal_irq || signal_nmi;
@@ -146,25 +146,11 @@ class CPU
 
     // Memory operations
   
-    uint8_t cart_read(uint16_t addr)
-    {
-        if     (addr < 0x6000) return 0;
-        else if(addr < 0x8000) return prg_ram[addr % 0x2000];
-        else                   return prg_rom[addr % 0x4000];
-    }
-
-    void cart_write(uint16_t addr, uint8_t data)
-    {
-        if     (addr < 0x6000) {}
-        else if(addr < 0x8000) prg_ram[addr % 0x2000] = data;
-        else                   {}
-    }
-    
     void strobe_controllers(uint8_t data)
     {
         bool strobe = data & (1U << 0);
-        port_one->set_strobe(strobe);
-        port_two->set_strobe(strobe);
+        port_one.set_strobe(strobe);
+        port_two.set_strobe(strobe);
     }
 
 
@@ -173,9 +159,9 @@ class CPU
         uint8_t data = 0;
         switch(addr)
         {
-            case(0x15): data = apu->read_reg_status();  break;
-            case(0x16): data = port_one->read_bit();    break;
-            case(0x17): data = port_two->read_bit();    break;
+            case(0x15): data = apu.read_reg_status();  break;
+            case(0x16): data = port_one.read_bit();    break;
+            case(0x17): data = port_two.read_bit();    break;
             default:    data = 0;                       break;
         }
 
@@ -187,19 +173,19 @@ class CPU
         uint8_t sub_addr = addr % 4;
         switch(addr / 4)
         {
-            case(0): apu->write_reg_pulse   (sub_addr, data, false);    break;
-            case(1): apu->write_reg_pulse   (sub_addr, data, true);     break;
-            case(2): apu->write_reg_triangle(sub_addr, data);           break;
-            case(3): apu->write_reg_noise   (sub_addr, data);           break;
-            //case(4): apu->write_reg_dmc     (sub_addr, data);           break;
+            case(0): apu.write_reg_pulse   (sub_addr, data, false);    break;
+            case(1): apu.write_reg_pulse   (sub_addr, data, true);     break;
+            case(2): apu.write_reg_triangle(sub_addr, data);           break;
+            case(3): apu.write_reg_noise   (sub_addr, data);           break;
+            //case(4): apu.write_reg_dmc     (sub_addr, data);           break;
             case(5):
             {
                 switch(addr % 4)
                 {
                     case(0): exec_oam_dma         (data);   break;
-                    case(1): apu->write_reg_status(data);   break;
+                    case(1): apu.write_reg_status(data);   break;
                     case(2): strobe_controllers   (data);   break;
-                    case(3): apu->write_reg_frame (data);   break;
+                    case(3): apu.write_reg_frame (data);   break;
                 }
                 break;
             }
@@ -247,11 +233,11 @@ class CPU
         {
             case(Mem_HW::RAM):     data = ram[hw_addr];
                                    break;
-            case(Mem_HW::PPU_REG): data = ppu->read_reg(hw_addr);
+            case(Mem_HW::PPU_REG): data = ppu.read_reg(hw_addr);
                                    break;
             case(Mem_HW::IO_REG):  data = read_reg(hw_addr);
                                    break;
-            case(Mem_HW::CART):    data = cart_read(hw_addr);
+            case(Mem_HW::CART):    data = cart.cpu_read(shared_bus, hw_addr);
                                    break;
         }
 
@@ -269,11 +255,11 @@ class CPU
         {
             case(Mem_HW::RAM):     ram[hw_addr] = data;             
                                    break;
-            case(Mem_HW::PPU_REG): ppu->write_reg(hw_addr, data);   
+            case(Mem_HW::PPU_REG): ppu.write_reg(hw_addr, data);   
                                    break;
             case(Mem_HW::IO_REG):  write_reg(hw_addr, data);
                                    break;
-            case(Mem_HW::CART):    cart_write(hw_addr, data);       
+            case(Mem_HW::CART):    cart.cpu_write(shared_bus, hw_addr, data);       
                                    break;
         }
 
@@ -1039,12 +1025,11 @@ class CPU
 
   public:
     
-    CPU(Shared_Bus* shared_bus, PPU* ppu, APU* apu, Controller* port_one, 
-            Controller* port_two, vector<uint8_t> loaded_prg)
-        : shared_bus(shared_bus), ppu(ppu), apu(apu), port_one(port_one), 
-          port_two(port_two)
+    CPU(Shared_Bus& shared_bus, Cartridge& cart, PPU& ppu, APU& apu, 
+            Controller& port_one, Controller& port_two)
+        : shared_bus(shared_bus), cart(cart), ppu(ppu), apu(apu), 
+          port_one(port_one), port_two(port_two)
     {
-        memcpy(prg_rom, loaded_prg.data(), 0x8000 * sizeof(uint8_t));
         reset_state(true);
     }
 
