@@ -82,7 +82,7 @@ vector<uint8_t> load_file(const char* path)
     return vector<uint8_t>(std::istream_iterator<uint8_t>(input), {});
 }
 
-void run(const SDL_Aux::State& io, const char* rom_filepath)
+void run(const char* rom_filepath)
 {
     vector<uint8_t> rom = load_file(rom_filepath);
     Console console(load_ines(rom));
@@ -90,6 +90,9 @@ void run(const SDL_Aux::State& io, const char* rom_filepath)
     uint32_t argb_framebuf[width_px * height_px];
     size_t samples_out_per_frame = sample_rate / frame_rate;
     float audio_out[samples_out_per_frame];
+    
+    SDL_Aux::State io;
+    SDL_Aux::init(io, width_px, height_px, sample_rate);
     
     uint64_t frame_count = 0;
 
@@ -122,17 +125,14 @@ void run(const SDL_Aux::State& io, const char* rom_filepath)
         }
     } 
     while(!(io.kb_state[SDL_SCANCODE_ESCAPE]));
+
+    SDL_Aux::quit(io);
 }
 
 int main(int argc, char** argv)
 {
     if(argc != 2) return 1;
     const char* rom_filepath = argv[1];
-
-    SDL_Aux::State io;
-    SDL_Aux::init(io, width_px, height_px, sample_rate);
     
-    run(io, rom_filepath);
-    
-    SDL_Aux::quit(io);
+    run(rom_filepath);
 }
