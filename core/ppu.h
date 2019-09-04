@@ -554,9 +554,11 @@ class PPU
             }
         }
         
-        uint8_t bg_palette = lshift(palette_shift_lo, 
-                                    palette_shift_hi,
-                                    scroll_x_fine);
+        uint8_t bg_palette = ((bg_color != 0) 
+                ? lshift(palette_shift_lo, 
+                         palette_shift_hi,
+                         scroll_x_fine)
+                : 0);
         return ((bg_palette << 2) | bg_color);
     }
 
