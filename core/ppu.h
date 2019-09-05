@@ -432,8 +432,8 @@ class PPU
                 bool is_vertically_mirrored = (oam_buf & (1U << 7));
                 if(is_vertically_mirrored)
                 {
-                    uint8_t mask = (~(0xFFFFU << 2) | 
-                                    ((ctrl_sprites_large ? 1U : 0U) << 3));
+                    uint8_t mask = (~(0xFFFFU << 3)) | 
+                                   ((ctrl_sprites_large ? 1U : 0U) << 4);
                     tile_sliver_addr ^= mask;
                 }
                 ++oam_aux_addr;
