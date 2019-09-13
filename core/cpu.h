@@ -356,6 +356,11 @@ class CPU
         A = (sum % 0x100);
     }
      
+    // I'm aware that using template-based opcode dispatch leads to a 
+    // considerably bigger binary size and heavy cache missing with only
+    // the mild benefit of improved inlining; I implemented it this way due
+    // to pattern-matching being expressed more easily, and since the CPU
+    // isn't a performance bottleneck at the moment, this can be changed later.
 
     template<AddrMode am>
     void opcode(Instr_Tag<ADC>) 
