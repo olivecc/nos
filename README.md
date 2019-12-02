@@ -53,7 +53,7 @@ with SDL2.
 ## Author
 
 **Oliver Vecchini** [olivecc](https://github.com/olivecc)  
-License information can be found [here](LICENSE.txt).
+License information can be found [here](LICENSE).
 
 
 [dynarec]:
