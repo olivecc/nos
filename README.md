@@ -1,5 +1,7 @@
 # NOS
 
+[See demo here][demo]
+
 NOS is a cross-platform emulator for the NTSC revisions of the _Nintendo
 Entertainment System_ and _Family Computer_ video game consoles released by
 Nintendo Co., Ltd. in the early 1980s, henceforth collectively referred to as
@@ -55,6 +57,9 @@ with SDL2.
 **Oliver Vecchini** [olivecc](https://github.com/olivecc)  
 License information can be found [here](LICENSE).
 
+
+[demo]:
+https://www.youtube.com/watch?v=hFIpRHamZNk
 
 [dynarec]:
 https://en.wikipedia.org/wiki/Dynamic_recompilation
