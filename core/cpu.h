@@ -120,6 +120,9 @@ class CPU
         ppu.execute_cycle();
         
         apu.process_frame_cpu_phase();
+        
+        // End-of-instruction poll result (treat every cycle as the last)
+        should_interrupt = signal_irq || signal_nmi;
     }
 
     void phase_two()
@@ -129,8 +132,6 @@ class CPU
         apu.process_frame_cpu_phase();
         apu.tick(cycle_count % 2);
 
-        // End-of-instruction poll result (treat every cycle as the last)
-        should_interrupt = signal_irq || signal_nmi;
         // IRQ level-detector/NMI edge-detector results
         if(!ignore_irq_change)
         {
@@ -162,7 +163,7 @@ class CPU
             case(0x15): data = apu.read_reg_status();  break;
             case(0x16): data = port_one.read_bit();    break;
             case(0x17): data = port_two.read_bit();    break;
-            default:    data = 0;                       break;
+            default:    data = 0;                      break;
         }
 
         return data;
@@ -298,7 +299,6 @@ class CPU
     template<AddrMode am>
     void write_data(uint8_t);
     
-    // Postcondition: PC contains ((address of next operation) - 1)
     template<AddrMode am>
     void get_effective_operand();
 
@@ -466,9 +466,9 @@ class CPU
         if(data & (1U << 7))
             PS |= PS_Flags::CARRY;
 
-        data <<= 1;
         if(am != Acc) 
             write_data<am>(data);
+        data <<= 1;
 
         assign_zn_flags(data);
         write_data<am>(data);
@@ -483,9 +483,9 @@ class CPU
         if(data & (1U << 0))
             PS |= PS_Flags::CARRY;
 
-        data >>= 1;
         if(am != Acc) 
             write_data<am>(data);
+        data >>= 1;
 
         assign_zn_flags(data);
         write_data<am>(data);
@@ -501,10 +501,10 @@ class CPU
         if(data & (1U << 7))
             PS |= PS_Flags::CARRY;
 
-        data <<= 1;
-        data |= (prev_carry ? (1U << 0) : 0);
         if(am != Acc) 
             write_data<am>(data);
+        data <<= 1;
+        data |= (prev_carry ? (1U << 0) : 0);
 
         assign_zn_flags(data);
         write_data<am>(data);
@@ -520,10 +520,10 @@ class CPU
         if(data & (1U << 0))
             PS |= PS_Flags::CARRY;
 
-        data >>= 1;
-        data |= (prev_carry ? (1U << 7) : 0);
         if(am != Acc) 
             write_data<am>(data);
+        data >>= 1;
+        data |= (prev_carry ? (1U << 7) : 0);
 
         assign_zn_flags(data);
         write_data<am>(data);
@@ -570,6 +570,9 @@ class CPU
         // Strictly speaking, this operation occurs between the fetches of the
         // lsb/msb of the absolute value (new PC); a 'bubble' is required to
         // store the lsb, to allow the old PC to be pushed to the stack
+        // (PC is temporarily decremented here to account for here)
+        --PC;
+
         mem_read(effective_SP());
         
         uint8_t msb = PC >> 8;
@@ -592,50 +595,55 @@ class CPU
         ++SP;
 
         uint8_t msb = mem_read(effective_SP());
-        uint16_t new_PC_minus_one = ((msb << 8) | lsb);
+        PC = ((msb << 8) | lsb);
 
         mem_read(effective_SP());
-        PC = new_PC_minus_one;
+        ++PC;
     }
     
     template<AddrMode am>
     void opcode(Instr_Tag<BRK>)
     {
-        // Executed concurrently with previous cycle
         if(!is_interrupt)
+        {
+            // Executed concurrently with previous cycle
             ++PC;
+        }
 
         uint8_t msb = (PC >> 8);
         mem_write(effective_SP(), msb);
         --SP;
 
-        uint8_t lsb = (PC % 0x100);
+        uint8_t lsb = (PC % (1U << 8));
         mem_write(effective_SP(), lsb);
         --SP;
         
+        // http://wiki.nesdev.com/w/index.php/CPU_interrupts
+        // ('Interrupt_hijacking')
+        // Can also be hijacked by IRQ (with no effect)
+        // Also covers NMI taking precedence over IRQ
+        uint16_t interrupt_vector_addr = (signal_nmi
+            ? (signal_nmi = false, IV_Addr::NMI)
+            : IV_Addr::IRQ);
+
         uint8_t flags_to_push = PS | PS_Flags::UNUSED;
-        if(!is_interrupt) flags_to_push |= PS_Flags::BREAK;
+        if(!is_interrupt) 
+            flags_to_push |= PS_Flags::BREAK;
         mem_write(effective_SP(), flags_to_push);
         --SP;
         
         PS |= PS_Flags::IRQ_DISABLE;
-        // http://wiki.nesdev.com/w/index.php/CPU_interrupts ('Interrupt
-        // hijacking')
-        // Can also be hijacked by IRQ (with no effect)
-        // Also covers NMI taking precedence over IRQ
-        // TODO signal_nmi unchanged in IRQ? test
-        uint16_t interrupt_vector_addr = (signal_nmi
-            ? (signal_nmi = false, IV_Addr::NMI)
-            : IV_Addr::IRQ);
         // http://visual6502.org/wiki/index.php?title=6502_Interrupt_Hijacking
         // ('NMI hijacking IRQ/BRK')
-        ignore_nmi_change = true;
+        //ignore_nmi_change = true;
         lsb = mem_read(interrupt_vector_addr);
         ++interrupt_vector_addr;
 
         msb = mem_read(interrupt_vector_addr);
-        ignore_nmi_change = false;
+        //ignore_nmi_change = false;
         PC = (msb << 8) | lsb;
+
+        should_interrupt = false;
     }
     
     template<AddrMode am>
@@ -998,7 +1006,7 @@ class CPU
         // instructions and interrupts')
         // Interrupt lines are not polled on this cycle
         ignore_irq_change = ignore_nmi_change = true;
-        mem_read(PC + 1);
+        mem_read(PC);
         ignore_irq_change = ignore_nmi_change = false;
         uint16_t new_PC = PC + displacement;
 
@@ -1021,8 +1029,6 @@ class CPU
 
         opcode<am>(Instr_Tag<i>{});
         
-        if((i != JMP) && (i != JSR) && (i != BRK) && (i != RTI))
-            ++PC;
         if(should_branch)
             perform_branch();
     }
@@ -1114,7 +1120,7 @@ class CPU
 /*0xFC*/    &C::op<NOP,AbX>, &C::op<SBC,AbX>, &C::op<INC,AbXS>,&C::op<ISC,AbXS>, 
         };
 
-        uint8_t opcode = mem_read(PC);
+        uint8_t opcode = mem_read(PC++);
         (this->*(dispatch_table[opcode]))();
         
         if(should_interrupt)
@@ -1137,33 +1143,33 @@ class CPU
 template<> inline void CPU::get_effective_operand<Imp>() 
 {
     // First byte of 'operand' (which does not exist) is read/discarded
-    mem_read(PC + 1); 
+    mem_read(PC); 
     effective_operand = 0; 
 }
 
 template<> inline void CPU::get_effective_operand<Acc>() 
 {
     // First byte of 'operand' (which does not exist) is read/discarded
-    mem_read(PC + 1);
+    mem_read(PC);
     effective_operand = A; 
 }
 
 template<> inline void CPU::get_effective_operand<Imm>()
 { 
-    uint8_t immediate = mem_read(++PC);
+    uint8_t immediate = mem_read(PC++);
     effective_operand = immediate;
 }
 
 template<> inline void CPU::get_effective_operand<ZP>()
 {
-    uint8_t index = mem_read(++PC);
+    uint8_t index = mem_read(PC++);
     effective_operand = index;
 }
 
 
 inline void CPU::get_effective_operand_ZP_(uint8_t reg)
 {
-    uint8_t index = mem_read(++PC);
+    uint8_t index = mem_read(PC++);
     
     mem_read(index);
     index += reg;
@@ -1183,9 +1189,9 @@ template<> inline void CPU::get_effective_operand<ZPY>()
 
 template<> inline void CPU::get_effective_operand<Ab>()
 {
-    uint8_t lsb = mem_read(++PC);
+    uint8_t lsb = mem_read(PC++);
 
-    uint8_t msb = mem_read(++PC);
+    uint8_t msb = mem_read(PC++);
     uint16_t index = (msb << 8) | lsb;
     effective_operand = index;
 }
@@ -1210,9 +1216,9 @@ inline void CPU::get_effective_operand_page_boundary(uint8_t lsb, uint8_t msb,
 
 inline void CPU::get_effective_operand_Ab__(uint8_t reg, bool is_write_involved)
 {
-    uint8_t lsb = mem_read(++PC);
+    uint8_t lsb = mem_read(PC++);
     
-    uint8_t msb = mem_read(++PC);
+    uint8_t msb = mem_read(PC++);
 
     get_effective_operand_page_boundary(lsb, msb, reg, is_write_involved);
 }
@@ -1240,9 +1246,9 @@ template<> inline void CPU::get_effective_operand<AbYS>()
 
 template<> inline void CPU::get_effective_operand<In>()
 {
-    uint8_t fst_lsb = mem_read(++PC);
+    uint8_t fst_lsb = mem_read(PC++);
 
-    uint8_t fst_msb = mem_read(++PC);
+    uint8_t fst_msb = mem_read(PC++);
     uint16_t index = (fst_msb << 8) | fst_lsb;
 
     uint8_t snd_lsb = mem_read(index);
@@ -1256,7 +1262,7 @@ template<> inline void CPU::get_effective_operand<In>()
 
 template<> inline void CPU::get_effective_operand<InX>()
 {
-    uint8_t index = mem_read(++PC);
+    uint8_t index = mem_read(PC++);
 
     mem_read(index);
     index += X;
@@ -1271,7 +1277,7 @@ template<> inline void CPU::get_effective_operand<InX>()
 
 inline void CPU::get_effective_operand_InY_(bool is_write_involved)
 {
-    uint8_t index = mem_read(++PC);
+    uint8_t index = mem_read(PC++);
 
     uint8_t lsb = mem_read(index);
 

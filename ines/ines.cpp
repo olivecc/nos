@@ -1,6 +1,6 @@
 #include <array>
 #include <cstdint>      // uint8_t
-#include <exception>    // runtime_error
+#include <stdexcept>    // runtime_error
 #include <memory>       // unique_ptr, make_unique
 #include <vector>
 #include <cstring>      // memcpy

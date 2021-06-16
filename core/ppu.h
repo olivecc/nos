@@ -55,6 +55,8 @@ class PPU
     bool oam_aux_full = false;
     uint8_t sprite_bytes_copied = 0;
     bool sprite_in_range = false;
+    bool sprite_zero_in_range = false;
+    bool sprite_zero_on_scanline = false;
     bool oam_scanned = false;
     uint8_t sprite_count = 0;
     uint8_t overflow_cycle_count = 0;
@@ -204,9 +206,14 @@ class PPU
         {
             sprite_count = 0;
             sprite_in_range = false;
+            sprite_zero_in_range = false;
             oam_aux_full = false;
             oam_scanned = false;
             overflow_cycle_count = 0;
+        }
+        else if(dot() == 256)
+        {
+            sprite_zero_on_scanline = sprite_zero_in_range;
         }
 
         if(dot() % 2)
@@ -234,6 +241,9 @@ class PPU
 
                 if(sprite_in_range)
                 {
+                    if(oam_addr == 0)
+                        sprite_zero_in_range = true;
+
                     ++oam_addr;
 
                     if(oam_aux_full)
@@ -533,8 +543,8 @@ class PPU
                                         : lshift(sp_lo, sp_hi, 0));
                     if(sp_color != 0)
                     {
-                        if((i == 0) && (bg_color != 0) &&
-                           (dot() != width_px))
+                        if(sprite_zero_on_scanline && (i == 0) && 
+                           (bg_color != 0) && (dot() != width_px))
                         {
                             stat_sp_zero_hit = true;
                         }
@@ -611,11 +621,11 @@ class PPU
                 {
                     fetch_bg_tile_data();
 
-                    if(dot() % 8 == 0)        increment_scroll_x_coarse();
-                    if(dot() == width_px) increment_scroll_y();
+                    if(dot() % 8 == 0)          increment_scroll_x_coarse();
+                    if(dot() == width_px)       increment_scroll_y();
 
-                    if(dot() <= 64)            clear_oam_aux();
-                    else if(is_visible_scanln) perform_sprite_evaluation();
+                    if(dot() <= 64)             clear_oam_aux();
+                    else if(is_visible_scanln)  perform_sprite_evaluation();
                 }
 
                 if(is_visible_scanln)
@@ -664,15 +674,15 @@ class PPU
             {
                 if(is_rendering_enabled()) 
                 {
-                    if(dot() == scanln_width - 1)
+                    if(dot() % 2) cart_read(nt_addr());
+
+                    if(dot() == scanln_width - 3)
                     {
-                        if(!is_visible_scanln && !even_odd_frame) 
+                        if(!is_visible_scanln && even_odd_frame) 
                         {
                             increment_cycle_count();
                         }
                     }
-
-                    if(dot() % 2) cart_read(nt_addr());
                 }
             }
         }

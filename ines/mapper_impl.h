@@ -1,6 +1,8 @@
 #ifndef  MAPPER_IMPL_H_NOS
 #define  MAPPER_IMPL_H_NOS
 
+#include <stdexcept>
+
 #include "header.h"
 #include "mapper.h"
 
